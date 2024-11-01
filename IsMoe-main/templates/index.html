@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Is Moe a Millionaire?</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        html {
+            scroll-snap-type: y mandatory;
+        }
+
+        .page {
+            height: 100vh;
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+        }
+
+        .not-millionaire {
+            background: linear-gradient(45deg, #160101 0%, #330808 50%, #160101 100%);
+            transition: background 1s ease;
+        }
+
+        .millionaire {
+            background: linear-gradient(45deg, #014a1c 0%, #00843d 50%, #014a1c 100%);
+            transition: background 1s ease;
+        }
+
+        .celebration {
+            animation: celebration 4s ease infinite;
+        }
+
+        @keyframes celebration {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .progress-bar {
+            width: 80%;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        }
+
+        .progress-fill {
+            height: 100%;
+            transition: width 1s ease;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, 
+                rgba(255,255,255,0) 0%,
+                rgba(255,255,255,0.2) 50%,
+                rgba(255,255,255,0) 100%);
+            animation: shine 2s infinite;
+        }
+
+        .not-millionaire .progress-fill {
+            background: linear-gradient(90deg, #ff0000 0%, #ff4444 100%);
+        }
+
+        .millionaire .progress-fill {
+            background: linear-gradient(90deg, #00ff00 0%, #44ff44 100%);
+        }
+
+        @keyframes shine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .value-up {
+            animation: flashGreen 1s ease;
+        }
+
+        .value-down {
+            animation: flashRed 1s ease;
+        }
+
+        @keyframes flashGreen {
+            0% { text-shadow: 0 0 20px #00ff00; }
+            50% { text-shadow: 0 0 40px #00ff00; color: #00ff00; }
+            100% { text-shadow: 0 0 20px #00ff00; }
+        }
+
+        @keyframes flashRed {
+            0% { text-shadow: 0 0 20px #ff0000; }
+            50% { text-shadow: 0 0 40px #ff0000; color: #ff0000; }
+            100% { text-shadow: 0 0 20px #ff0000; }
+        }
+
+        .millionaire-celebration {
+            background: linear-gradient(-45deg, #ff0000, #00ff00, #0000ff, #ff00ff);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            pointer-events: none;
+        }
+
+        .main-value {
+            font-size: 5rem;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        .status-text {
+            font-size: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .millionaire .status-text {
+            animation: rainbow 2s linear infinite;
+        }
+
+        @keyframes rainbow {
+            0% { color: #ff0000; }
+            20% { color: #ffff00; }
+            40% { color: #00ff00; }
+            60% { color: #00ffff; }
+            80% { color: #ff00ff; }
+            100% { color: #ff0000; }
+        }
+
+        .value-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .trend-arrow {
+            position: absolute;
+            right: -30px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 24px;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .trend-arrow.visible {
+            opacity: 1;
+        }
+
+        .up-arrow { color: #00ff00; }
+        .down-arrow { color: #ff0000; }
+    </style>
+</head>
+<body class="text-white not-millionaire">
+    <!-- First Page -->
+    <div class="page flex items-center justify-center relative overflow-hidden">
+        <div class="text-center z-10">
+            <h1 class="text-6xl font-bold mb-12">Is Moe a Millionaire?</h1>
+            
+            <div class="mb-12">
+                <div class="value-container mb-8">
+                    <span class="main-value">$<span id="main-total">0.00</span></span>
+                    <span class="trend-arrow" id="trend-arrow"></span>
+                </div>
+                
+                <div class="flex justify-center items-center mb-6">
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <div class="status-text" id="status-text">
+                    $<span id="remaining">1,000,000.00</span> to go
+                </div>
+            </div>
+
+            <div id="main-status" class="text-4xl font-bold status-text">
+                Not yet... 😢
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Page -->
+    <div class="page p-8">
+        <div class="max-w-4xl mx-auto">
+            <h2 class="text-4xl font-bold mb-8">Portfolio Details</h2>
+            
+            <div class="grid gap-6">
+                <!-- Token cards here (same as before) -->
+                <!-- PONKE Card -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="text-2xl font-bold">PONKE</h3>
+                            <div class="text-sm opacity-70">Holdings: 1,000,000</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-2xl">$<span id="ponke-price">0.00</span></div>
+                            <div id="ponke-change" class="text-sm"></div>
+                            <div class="text-lg">Value: $<span id="ponke-value">0.00</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GME Card -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="text-2xl font-bold">GME</h3>
+                            <div class="text-sm opacity-70">Holdings: 1,000,000</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-2xl">$<span id="gme-price">0.00</span></div>
+                            <div id="gme-change" class="text-sm"></div>
+                            <div class="text-lg">Value: $<span id="gme-value">0.00</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- USA Card -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="text-2xl font-bold">USA</h3>
+                            <div class="text-sm opacity-70">Holdings: 1,000,000</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-2xl">$<span id="usa-price">0.00</span></div>
+                            <div id="usa-change" class="text-sm"></div>
+                            <div class="text-lg">Value: $<span id="usa-value">0.00</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Previous script content here, plus these new functions:
+        const socket = io({
+			transports: ['websocket'],
+			upgrade: false,
+			reconnection: true,
+			reconnectionAttempts: 5,
+			reconnectionDelay: 1000
+		});
+        const formatter = new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 8
+        });
+
+        const valueFormatter = new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+
+        const GOAL = 1000000;
+
+        function updateTheme(total) {
+            const isMillionaire = total >= GOAL;
+            document.body.className = isMillionaire ? 'text-white millionaire' : 'text-white not-millionaire';
+            
+            // Update main status
+            const mainStatus = document.getElementById('main-status');
+            mainStatus.textContent = isMillionaire ? "MOE IS A MILLIONAIRE! 🎉" : "Not yet... 😢";
+            
+            // Update progress
+            const progress = (total / GOAL) * 100;
+            const progressFill = document.getElementById('progress-fill');
+            progressFill.style.width = `${Math.min(progress, 100)}%`;
+
+            // Update remaining
+            const remaining = Math.max(GOAL - total, 0);
+            document.getElementById('remaining').textContent = valueFormatter.format(remaining);
+            
+            // Update status text
+            const statusText = document.getElementById('status-text');
+            statusText.textContent = isMillionaire ? 
+                `${valueFormatter.format(total - GOAL)} over goal!` :
+                `$${valueFormatter.format(remaining)} to go`;
+
+            // Animate if becoming millionaire
+            if (isMillionaire) {
+                gsap.to(".card", {
+                    y: 0,
+                    opacity: 1,
+                    duration: 1,
+                    stagger: 0.2,
+                    ease: "back.out"
+                });
+            }
+        }
+
+        function animateValue(element, start, end) {
+            gsap.to({value: start}, {
+                value: end,
+                duration: 1,
+                onUpdate: function() {
+                    element.textContent = valueFormatter.format(this.targets()[0].value);
+                }
+            });
+        }
+
+        socket.on('price_update', (data) => {
+            const total = data.total_value;
+            
+            // Update main total with animation
+            animateValue(document.getElementById('main-total'), 
+                        parseFloat(document.getElementById('main-total').textContent.replace(/,/g, '')), 
+                        total);
+
+            // Update theme and progress
+            updateTheme(total);
+
+            // Update token cards
+            Object.entries(data.prices).forEach(([token, tokenData]) => {
+                const price = tokenData.price;
+                const value = tokenData.value;
+                const change = tokenData.priceChange24h;
+
+                document.getElementById(`${token.toLowerCase()}-price`).textContent = formatter.format(price);
+                document.getElementById(`${token.toLowerCase()}-value`).textContent = valueFormatter.format(value);
+                
+                const changeElement = document.getElementById(`${token.toLowerCase()}-change`);
+                const changeClass = change >= 0 ? 'token-change-up' : 'token-change-down';
+                const changeSign = change >= 0 ? '+' : '';
+                changeElement.className = `text-sm ${changeClass}`;
+                changeElement.textContent = `${changeSign}${change.toFixed(2)}%`;
+            });
+        });
+
+        // Initialize card animations
+        gsap.set(".card", {
+            y: 50,
+            opacity: 0
+        });
+
+        // Animate cards when in view
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    gsap.to(entry.target, {
+                        y: 0,
+                        opacity: 1,
+                        duration: 1,
+                        ease: "back.out"
+                    });
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.card').forEach(card => observer.observe(card));
+        let previousTotal = 0;
+
+        function createConfetti() {
+            const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+            for (let i = 0; i < 100; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.top = -10 + 'px';
+                document.body.appendChild(confetti);
+
+                gsap.to(confetti, {
+                    y: '100vh',
+                    x: (Math.random() - 0.5) * 200,
+                    rotation: Math.random() * 360,
+                    duration: Math.random() * 2 + 1,
+                    ease: 'none',
+                    onComplete: () => confetti.remove()
+                });
+            }
+        }
+
+        function updateValue(newValue) {
+            const mainTotal = document.getElementById('main-total');
+            const trendArrow = document.getElementById('trend-arrow');
+            
+            // Remove previous classes
+            mainTotal.classList.remove('value-up', 'value-down');
+            
+            // Add new class based on value change
+            if (newValue > previousTotal) {
+                mainTotal.classList.add('value-up');
+                trendArrow.textContent = '↑';
+                trendArrow.className = 'trend-arrow visible up-arrow';
+            } else if (newValue < previousTotal) {
+                mainTotal.classList.add('value-down');
+                trendArrow.textContent = '↓';
+                trendArrow.className = 'trend-arrow visible down-arrow';
+            }
+
+            // Animate the number
+            gsap.to({value: previousTotal}, {
+                value: newValue,
+                duration: 1,
+                ease: "power2.out",
+                onUpdate: function() {
+                    mainTotal.textContent = valueFormatter.format(this.targets()[0].value);
+                }
+            });
+
+            // Hide arrow after animation
+            setTimeout(() => {
+                trendArrow.className = 'trend-arrow';
+            }, 1000);
+
+            previousTotal = newValue;
+        }
+
+        function celebrateMillionaire() {
+            document.body.classList.add('millionaire-celebration');
+            createConfetti();
+            
+            // Pulse animation for main value
+            gsap.to('.main-value', {
+                scale: 1.2,
+                duration: 0.5,
+                yoyo: true,
+                repeat: 3
+            });
+
+            setInterval(createConfetti, 2000); // Continue celebration
+        }
+
+        // Update the socket.on('price_update') handler:
+        socket.on('price_update', (data) => {
+            const total = data.total_value;
+            const isNewMillionaire = total >= 1000000 && previousTotal < 1000000;
+            
+            updateValue(total);
+            updateTheme(total);
+
+            if (isNewMillionaire) {
+                celebrateMillionaire();
+            }
+
+            // Rest of your existing update code...
+        });
+    </script>
+</body>
+</html>
